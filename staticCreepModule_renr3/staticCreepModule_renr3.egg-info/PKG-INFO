@@ -1,0 +1,17 @@
+Metadata-Version: 2.2
+Name: staticCreepModule_renr3
+Version: 0.0.1
+Summary: A package to post-process static creep test results
+Author-email: "renan.rocha.ribeiro@gmail.com" <renan.rocha.ribeiro@gmail.com>
+Project-URL: Homepage, https://github.com/renr3/staticCreepPostProcess
+Project-URL: Issues, https://github.com/renr3/staticCreepPostProcess/issues
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: matplotlib<4.0.0,>=3.4.0
+Requires-Dist: numpy<2.0.0,>=1.21.0
+
+This is a package to post-process your static creep experimental data.

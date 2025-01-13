@@ -6,15 +6,27 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pickle
 
+from typing import Dict, Literal, Optional
+
 #To search for CSV files automatically
 import os
 import glob
 
-class testSpecimen():
+class TestSpecimen():
     """
     A class that defines all the parameters of a test specimen
     """
-    def __init__(self, specimenID, acquisitionSystem, channelsLVDT, baseLength, appliedStress, channelsName, lineColor, lineStyleForPlot, uncalibratedValues=False, absoluteValues=False):
+    def __init__(self, 
+                 specimenID:str, 
+                 acquisitionSystem: Literal["inegi","national"], 
+                 channelsLVDT: list[int], 
+                 baseLength: float, 
+                 appliedStress: float, 
+                 channelsName: list[str], 
+                 lineColor: list[str], 
+                 lineStyleForPlot: list[str], 
+                 uncalibratedValues: bool =False, 
+                 absoluteValues: bool =False):
         """
         Initialization of class
         Parameters:
@@ -54,7 +66,7 @@ class testSpecimen():
                 Datetime object that contains the start time of the test, considering the beginning of the creep system data
             - plotTime: list of float
                 List to be derived from timeData, but containing the number of seconds elapsed since the beggining of the test
-            - seriesStartTime: list
+            - seriesStartTime: list of datetime
                 Initiated as an empty list to be populated with the start time, in datetime object, of each series composing the data (data may be composed by several series, each in a different test file) read from experiment result files
             - creepStartTime: float
                 Time in which creep has started, in seconds. Taken from the compliance curve, in which 0 seconds coincides with seriesStartTime.
@@ -66,6 +78,8 @@ class testSpecimen():
                 Allows correcting for releases/slips that might occur during testing. They need to be manualy and visually detected in each test file.
                 Check method addReleaseCorrection() for further understanding on how this attribute works
         """
+        
+        
         #Attributes defined in class instantiation
         self.specimenID=specimenID
         self.acquisitionSystem=acquisitionSystem
@@ -79,6 +93,18 @@ class testSpecimen():
         self.absoluteValues=absoluteValues
 
         #Additional class attributes
+        #First, type these attributes
+        self.displacementData: Dict[str,list[float]]
+        self.strainData: Dict[str,list[float]]
+        self.complianceData: Dict[str,list[float]]
+        self.timeData: list[datetime]
+        self.startTimeOfTest: datetime
+        self.plotTime: list[float]
+        self.seriesStartTime: list[datetime]
+        self.specificCreepTimeData: list[float]
+        self.specificCreep: Dict[str,list[float]]
+        self.releaseCorrectionList: Dict[str,list[list[str],list[int],float,list[bool]]]
+
         self.displacementData={channel:[] for channel in channelsName}
         self.strainData={channel:[] for channel in channelsName}
         self.complianceData={channel:[] for channel in channelsName}
@@ -93,7 +119,7 @@ class testSpecimen():
 
         self.releaseCorrectionList={}
 
-    def setStartOfTest(self, startDateOfTest):
+    def setStartOfTest(self, startDateOfTest: datetime):
         """
         This function sets the beggining of the test, shifting all experimental data so the start of the data associated to this specimen coincides with startDateOfTest
         It also sets the attribute self.startTimeOfTest
@@ -130,6 +156,51 @@ class testSpecimen():
             for index, value in enumerate(self.displacementData[series]):
                 self.displacementData[series][index] = value - zeroShift
 
+    def setStartOfCreep(self, startDateCreep: datetime) -> None:
+        '''
+        A method to define the instant, in seconds, in which only creep is occurrying, i.e., all load has been applied
+        Parameters:
+            - startDateCreep: datetime object
+                Datetime object that index the point, considering the already offseted series after "setStartOfTest" method,
+                in which all load has been applied to the specimen.
+                This is done after checking agains loading switch data.
+        '''
+        self.creepStartTime=(startDateCreep-self.startTimeOfTest).total_seconds()
+
+    def plotLVDTData(self) -> None:
+        for series in self.displacementData:
+            plt.plot(self.timeData, self.displacementData[series], label=series)
+        plt.ylabel("Displacement (mm)")
+        plt.xlabel("Time (date)")
+        plt.title("Displacement data for " + self.specimenID)
+        plt.legend()
+
+    def addReleaseCorrection(self, 
+                             fileName: str, 
+                             listOfChannelsToBeCorrected: list[str], 
+                             listOfLinesFromWhichCorrectionIsApplied: list[int], 
+                             correctionToApply: float):
+        '''
+        A method to define the points for correcting eventual releases/slips that occur in LVDTs during testing,
+        associated to external factors of the experiment, and which create huge jumps in displacement data.
+        It populates the attribute self.releaseCorrectionList
+        It has to be called once for every file in which release/slip occurs
+        Parameters:
+            - fileName: str
+                A real file name, with .csv, in which the release/slip has occurred
+            - listOfChannelsToBeCorrected: list of str
+                A list of the names of LVDT channels that will be corrected, according to the names given when constructing this object
+            - listOfLinesFromWhichCorrectionIsApplied: list of ints
+                A list of the lines in the files (ordered according to the channels to be corrected) beyond which the correction will always be applied
+                It has to discount the header (counts from the first line of data)
+            - correctionToApply: float
+                A correction, in mm, to be applied (summed or subtract) to the experimental data
+        '''
+        #The line-1 below is justified because Python indexes the 1st line as line 0
+        #The last element helps identifying whether this correction was applied to the data or not
+        self.releaseCorrectionList[fileName] = [listOfChannelsToBeCorrected, [line-1 for line in listOfLinesFromWhichCorrectionIsApplied], correctionToApply, [False for item in listOfChannelsToBeCorrected]]
+                        
+    #This is legacy code when we were using old National system with a custom-made multiplexer
     def unmixChannel(self, displacementSeriesReference, displacementSeriesSecondary):
         """
         Sometime the National system may mix up two consecutive channels, switching the values between them.
@@ -154,7 +225,7 @@ class testSpecimen():
                 if abs((value-displacementSeriesReference[index])/value)<0.05:
                     displacementSeriesSecondary[index]=np.NaN
         displacementSeriesSecondary = [x for x in displacementSeriesSecondary if ~np.isnan(x)]
-        
+    
     def manualCalibration(self, calibrationCurves):
         """
         Sometimes we may want to input manual calibrations in the code (for National system mainly)
@@ -168,51 +239,16 @@ class testSpecimen():
             b=calibrationCurves[series][1]
             self.displacementData[series]=[a*value+b for value in self.displacementData[series]]
 
-    def setStartOfCreep(self, startDateCreep):
-        '''
-        A method to define the instant, in seconds, in which only creep is occurrying, i.e., all load has been applied
-        Parameters:
-            - startDateCreep: datetime object
-                Datetime object that index the point, considering the already offseted series after "setStartOfTest" method,
-                in which all load has been applied to the specimen.
-                This is done after checking agains loading switch data.
-        '''
-        self.creepStartTime=(startDateCreep-self.startTimeOfTest).total_seconds()
-
-    def plotLVDTData(self):
-        for series in self.displacementData:
-            plt.plot(self.timeData, self.displacementData[series], label=series)
-        plt.ylabel("Displacement (mm)")
-        plt.xlabel("Time (date)")
-        plt.title("Displacement data for " + self.specimenID)
-        plt.legend()
-
-    def addReleaseCorrection(self, fileName, listOfChannelsToBeCorrected, listOfLinesFromWhichCorrectionIsApplied, correctionToApply):
-        '''
-        A method to define the points for correcting eventual releases/slips that occur in LVDTs during testing,
-        associated to external factors of the experiment, and which create huge jumps in displacement data.
-        It populates the attribute self.releaseCorrectionList
-        It has to be called once for every file in which release/slip occurs
-        Parameters:
-            - fileName: str
-                A real file name, with .csv, in which the release/slip has occurred
-            - listOfChannelsToBeCorrected: list of str
-                A list of the names of LVDT channels that will be corrected, according to the names given when constructing this object
-            - listOfLinesFromWhichCorrectionIsApplied: list of ints
-                A list of the lines in the files (ordered according to the channels to be corrected) beyond which the correction will always be applied
-                It has to discount the header (counts from the first line of data)
-            - correctionToApply: float
-                A correction, in mm, to be applied (summed or subtract) to the experimental data
-        '''
-        #The line-1 below is justified because Python indexes the 1st line as line 0
-        #The last element helps identifying whether this correction was applied to the data or not
-        self.releaseCorrectionList[fileName] = [listOfChannelsToBeCorrected, [line-1 for line in listOfLinesFromWhichCorrectionIsApplied], correctionToApply, [False for item in listOfChannelsToBeCorrected]]
-                        
-class loadCell():
+class LoadCell():
     """
     A class that defines all the parameters of a load cell
     """
-    def __init__(self, loadCellID, acquisitionSystem, channels, lineColor, lineStyleForPlot):
+    def __init__(self, 
+                 loadCellID: str, 
+                 acquisitionSystem: Literal["inegi","national"], 
+                 channels: int, 
+                 lineColor: str, 
+                 lineStyleForPlot: str):
         """
         Initialization of class
         Parameters:
@@ -245,11 +281,16 @@ class loadCell():
         self.lineStyleForPlot=lineStyleForPlot
 
         #Additional class attributes
+        #First, type these attributes
+        self.loadData: list[float]
+        self.timeData: list[datetime]
+        self.seriesStartTime: list[datetime]
+
         self.loadData=[]
         self.timeData=[]
         self.seriesStartTime=[]
 
-class loadingSwitch():
+class LoadingSwitch():
     """
     A class that defines all the parameters of a loading switch (an Arduino device that allows knowing when the load was completely applied to the specimen)
     """
@@ -261,14 +302,21 @@ class loadingSwitch():
                 Initiated as an empty list ot be puplated with time data read directly from experiment result files
             - timeData: list of datetime objetcts
                 Initiated as an empty list to be populated with time data from experiment result files
-            - readValues: list
+            - voltageData: list
                 Initiated as an empty list to be populated with the values read by the switch
         """
+        #Type these attributes
+        self.microsecondsData: list[float]
+        self.timeData: list[datetime]
+        self.voltageData: list[float]
+
         self.microsecondsData=[]
         self.timeData=[]
         self.voltageData=[]
     
-    def addOffset(self, dateTimeOffset, notablePointTimeInLoadingSwitch):
+    def addOffset(self, 
+                  dateTimeOffset: datetime, 
+                  notablePointTimeInLoadingSwitch: datetime) -> None:
         '''
         A method to time stamp the loadingSwitch data in the same reference as the LVDT creep data.
         Parameters:
@@ -284,7 +332,7 @@ class loadingSwitch():
         for instant in self.microsecondsData:
             self.timeData.append(dateTimeOffset+timedelta(microseconds=instant)-notablePointTimeInLoadingSwitch)
 
-    def plotData(self, typeOfTime='raw'):
+    def plotData(self, typeOfTime: Literal["raw","offset"] ='raw') -> None:
         if typeOfTime=='raw':
             plt.plot(self.microsecondsData, self.voltageData, label="loading switch")
             plt.xlabel("Time (microseconds)")
@@ -295,11 +343,16 @@ class loadingSwitch():
         plt.legend()
         plt.show()
 
-class experiment():
+class Experiment():
     """
     A class that defines a creep experiment with multiple test specimens
     """
-    def __init__(self, testSpecimensList, loadCellList, loadingSwitchObject=False, numberOfActiveChannels = False):
+    def __init__(self, 
+                 testSpecimensList: list[TestSpecimen], 
+                 loadCellList: list[LoadCell], 
+                 loadingSwitchObject: Optional[list[LoadingSwitch]]=False, 
+                 numberOfActiveChannels: Optional[float] = False):
+        
         #numberOfActiveChannels needs to be set only if not all testSpecimens or loadCells of the experiment
         #are used in the processing of the data
         self.testSpecimensList=testSpecimensList #Receives objects of testSpecimen class
@@ -308,9 +361,9 @@ class experiment():
         self.numberOfActiveChannels=numberOfActiveChannels
         #Separate specimens in the systems being used
         #This may be expanded as more systems are included among the testing systems
-        #The below two variables will keep the indices of testSpecimensList associated to each system (instead of copying everything)
-        self.inegiSpecimens=[]
-        self.nationalSpecimens=[]
+        #The below two variables will keep the indices of testSpecimensList associated to each system (instead of copying everything)       
+        self.inegiSpecimens: list[int]=[]
+        self.nationalSpecimens: list[int]=[]
         for index, specimen in enumerate(testSpecimensList):
             if specimen.acquisitionSystem == 'inegi':
                 self.inegiSpecimens.append(index)
@@ -322,8 +375,8 @@ class experiment():
                 exit()
         #Do the same with load cells
         #For now that we only have load cells in INEGI system, this is rather unuseful
-        self.inegiLoadCells=[]
-        self.nationalLoadCells=[]
+        self.inegiLoadCells: list[int]=[]
+        self.nationalLoadCells: list[int]=[]
         for index, loadCell in enumerate(loadCellList):
             if specimen.acquisitionSystem == 'inegi':
                 self.inegiLoadCells.append(index)
@@ -335,16 +388,19 @@ class experiment():
                 exit()
 
         #Define attributes that will storate statistical measurements of the creep test
-        self.interpolatedTimeData=None
-        self.averageCompliance=None
-        self.interpolatedTimeDataSpecificCreep=None
-        self.averageSpecificCreep=None
-        self.stdDevCompliance=None
-        self.stdDevSpecificCreep=None
-        self.coefficientOfVariationCompliance=None
-        self.coefficientOfVariationSpecificCreep=None
+        self.interpolatedTimeData: list[float]=None
+        self.averageCompliance: list[float]=None
+        self.interpolatedTimeDataSpecificCreep: list[float]=None
+        self.averageSpecificCreep: list[float]=None
+        self.stdDevCompliance: list[float]=None
+        self.stdDevSpecificCreep: list[float]=None
+        self.coefficientOfVariationCompliance: list[float]=None
+        self.coefficientOfVariationSpecificCreep: list[float]=None
 
-    def readCreep_Batch(self, path, timeStampingMethod, filterInterval=None):
+    def readCreep_Batch(self, 
+                        path: str, 
+                        timeStampingMethod: Literal["systemAutomatic","fileName"], 
+                        filterInterval: Optional[list[list[datetime]]]=None):
         """
         This function populates the attributes displacementData, timeData and seriesStartTime of each testSpecimens and load cell object
 
@@ -360,7 +416,10 @@ class experiment():
         if self.loadingSwitchObject is not False:
             self.readLoadingSwitch_Batch(path)
 
-    def readINEGI_Batch(self, path, timeStampingMethod, filterInterval=None):
+    def readINEGI_Batch(self, 
+                        path: str, 
+                        timeStampingMethod: Literal["systemAutomatic","fileName"], 
+                        filterInterval: Optional[list[list[datetime]]]=None) -> None:
         #Define the number of active channels in the test files
         #For the case all specimens and channels are to be used, then it follows the following logic:
             #This is equal to the number of objects associated to the INEGI system being read
@@ -546,7 +605,9 @@ class experiment():
                 currentSpecimen = self.testSpecimensList[specimenIndex]
                 currentSpecimen.seriesStartTime=seriesStartTime 
 
-    def readNational_Batch(self, path, timeStampingMethod):
+    def readNational_Batch(self, 
+                           path: str, 
+                           timeStampingMethod: Literal["systemAutomatic","fileName"]) -> None:
         #Define the number of active channels in the test files
         #This is equal to the number of objects associated to the INEGI system being read
         #In other words, it is the number of specimens LVDTs and load cells associated to the INEGI system
@@ -640,7 +701,8 @@ class experiment():
                 currentSpecimen = self.testSpecimensList[specimenIndex]
                 currentSpecimen.seriesStartTime=seriesStartTime 
 
-    def readLoadingSwitch_Batch(self, path):
+    def readLoadingSwitch_Batch(self, 
+                                path: str) -> None:
         '''
         This method reads the data from the loading switch system.
         The data must be in the custom format ".LSA" (to do that, just change the file extension from .txt to .lsa manually)
@@ -661,19 +723,19 @@ class experiment():
                     self.loadingSwitchObject.microsecondsData.append(int(row[1]))
                     self.loadingSwitchObject.voltageData.append(-(int(row[0])-1023))
 
-    def computeStrainHistory(self):
+    def computeStrainHistory(self) -> None:
         for specimen in self.testSpecimensList:
             for series in specimen.displacementData:
                 for value in specimen.displacementData[series]:
                     specimen.strainData[series].append((value/(specimen.baseLength)))
 
-    def computeCompliances(self):
+    def computeCompliances(self) -> None:
         for specimen in self.testSpecimensList:
             for series in specimen.displacementData:
                 for value in specimen.displacementData[series]:
                     specimen.complianceData[series].append((value/(specimen.baseLength))/specimen.appliedStress)
 
-    def computeSpecificCreep(self):
+    def computeSpecificCreep(self) -> None:
         """
         This function needs to be used after using computeCompliances(), since it will use the attribute specimen.complianceData to compute specific creep.
         It also requires defining the specimen's attribute self.creepStartTime, otherwise it will throw an error.
@@ -696,7 +758,7 @@ class experiment():
                         #Creep hasnt started, do nothing
                         pass
 
-    def computeStatisticalMeasures(self):
+    def computeStatisticalMeasures(self) -> None:
         """
         This method computes the average compliance and the associated standard deviation and coefficient of variation fof the data set
         It needs to be used after computeSpecificCreep()
@@ -749,7 +811,9 @@ class experiment():
         self.coefficientOfVariationSpecificCreep = np.divide(self.stdDevSpecificCreep,self.averageSpecificCreep)
 
     #Methods for visualization of results
-    def pltDisplacementData(self, logScale = False, normalized = False):
+    def pltDisplacementData(self, 
+                            logScale:bool = False, 
+                            normalized:bool = False)  -> None:
         """
         This method plots the displacement data, in micrometers.
         """
@@ -779,7 +843,9 @@ class experiment():
 
         plt.show()
     
-    def pltSpecimenSpecificCreep(self, logScale = False, normalized = False):
+    def pltSpecimenSpecificCreep(self, 
+                                 logScale:bool = False, 
+                                 normalized:bool = False)  -> None:
         """
         This method plots the specific creep of each specimen of the experiment, in [µε/MPa]
         It needs to be used after using computeCompliances(), since it will use the attribute specimen.complianceData to plot the data.
@@ -810,7 +876,12 @@ class experiment():
 
         plt.show()
 
-    def pltAverageCompliance(self, logScale = False, normalized = False, stdInterval=False, specimenResults=False, title=None):
+    def pltAverageCompliance(self, 
+                             logScale:bool = False, 
+                             normalized:bool = False, 
+                             stdInterval:bool =False, 
+                             specimenResults:bool=False, 
+                             title: Optional[str]=None)  -> None:
         """
         This method plots the average compliance considering all the specimens of the experiment, in [µε/MPa]
         It needs to be used after using computeStatisticalMeasures()
@@ -855,7 +926,12 @@ class experiment():
 
         plt.show()
     
-    def pltAverageSpecificCreep(self, logScale = False, normalized = False, stdInterval=False, specimenResults=False, title=None):
+    def pltAverageSpecificCreep(self, 
+                                logScale:bool = False, 
+                                normalized:bool = False, 
+                                stdInterval:bool=False, 
+                                specimenResults:bool=False, 
+                                title:Optional[str]=None) -> None:
         """
         This method plots the average specific creep considering all the specimens of the experiment, in [µε/MPa]
         It needs to be used after using computeStatisticalMeasures()
@@ -904,7 +980,8 @@ class experiment():
 
         plt.show()
 
-    def pltCoefficientOfVariationSpecificCreep(self, logScale = False):
+    def pltCoefficientOfVariationSpecificCreep(self, 
+                                               logScale:bool = False) -> None:
         plt.plot(self.interpolatedTimeData/(60*60*24), 100*self.coefficientOfVariationCompliance, color="black", label="Average")
         plt.xlabel("Time [days]")
         plt.ylabel("Coefficient of variation (%)")
@@ -914,7 +991,8 @@ class experiment():
         plt.show()
 
     #Methods for saving results in csv files
-    def saveAverageDisplacementData(self, fileName):
+    def saveAverageDisplacementData(self, 
+                                    fileName: str) -> None:
         """
         This method plots the displacement data, in micrometers.
         """
@@ -937,7 +1015,8 @@ class experiment():
             df = pd.concat([df, temporaryDataframe], axis=1)
         df.to_csv(f'{fileName}.csv',index=False)
 
-    def saveAverageCompliance(self, fileName):
+    def saveAverageCompliance(self, 
+                              fileName: str) -> None:
         """
         This method plots the displacement data, in micrometers.
         """
@@ -949,7 +1028,8 @@ class experiment():
 
         df.to_csv(f'{fileName}.csv',index=False)
     
-    def saveAverageSpecificCreep(self, fileName):
+    def saveAverageSpecificCreep(self, 
+                                 fileName: str) -> None:
         """
         This method plots the displacement data, in micrometers.
         """
@@ -962,7 +1042,8 @@ class experiment():
         df.to_csv(f'{fileName}.csv',index=False)
 
     ## Functions to pickle and store an experiment object
-    def saveExperimentObject(self, fileName):
+    def saveExperimentObject(self, 
+                             fileName: str) -> None:
         output = open(fileName, 'wb')
         # Pickle dictionary using protocol 0.
         pickle.dump(self, output)

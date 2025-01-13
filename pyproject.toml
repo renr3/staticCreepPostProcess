@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "staticCreepModule_renr3"
+version = "0.0.1"
+authors = [
+  { name="renan.rocha.ribeiro@gmail.com", email="renan.rocha.ribeiro@gmail.com" },
+]
+description = "A package to post-process static creep test results"
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "matplotlib >=3.4.0, <4.0.0",
+    "numpy >=1.21.0, <2.0.0"
+]
+
+[tool.setuptools.packages]
+find = {where = ["staticCreepModule_renr3"]}  # Scan the project directory with the default parameters
+
+[project.urls]
+Homepage = "https://github.com/renr3/staticCreepPostProcess"
+Issues = "https://github.com/renr3/staticCreepPostProcess/issues"
