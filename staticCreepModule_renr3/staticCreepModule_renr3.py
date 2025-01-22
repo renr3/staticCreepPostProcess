@@ -1,12 +1,15 @@
 #Import library
+cm = 1/2.54  # centimeters in inches
 import csv
 from datetime import datetime
 from datetime import timedelta
 import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
+from matplotlib.axes import Axes
 import numpy as np
 import pickle
 
-from typing import Dict, Literal, Optional
+from typing import Dict, Literal, Optional, Tuple
 
 #To search for CSV files automatically
 import os
@@ -99,6 +102,7 @@ class TestSpecimen():
         self.complianceData: Dict[str,list[float]]
         self.timeData: list[datetime]
         self.startTimeOfTest: datetime
+        self.creepStartTime: datetime
         self.plotTime: list[float]
         self.seriesStartTime: list[datetime]
         self.specificCreepTimeData: list[float]
@@ -812,80 +816,115 @@ class Experiment():
 
     #Methods for visualization of results
     def pltDisplacementData(self, 
+                            fig: Optional[Figure] = False,
+                            ax: Optional[Axes] = False,
+                            fontSize: int = False,
                             logScale:bool = False, 
-                            normalized:bool = False)  -> None:
+                            normalized:bool = False)  -> Tuple[Figure, Axes]:
         """
         This method plots the displacement data, in micrometers.
         """
         import numpy as np
+
+        if fontSize is False:
+            plt.rcParams['font.size'] = 10  # Set to your desired font size
+        if fig is False or ax is False:
+            fig, ax = plt.subplots(figsize=(15*cm,10*cm))
+        ax.grid(which='both', axis='both', linestyle='-', color='whitesmoke', zorder=-1)
+
         for specimen in self.testSpecimensList:
             listLVDT = list(specimen.displacementData.keys())
             y=[0 for values in specimen.displacementData[listLVDT[0]]]
             for series in specimen.displacementData:
                 y = [valuey+valuedict for valuey,valuedict in zip(y,specimen.displacementData[series])]
             if normalized is False:
-                plt.plot(np.array(specimen.plotTime)/(60*60*24), [1000*value/len(specimen.displacementData) for value in y], label=specimen.specimenID)
+                ax.plot(np.array(specimen.plotTime)/(60*60*24), [1000*value/len(specimen.displacementData) for value in y], label=specimen.specimenID)
             else:
                 y_plot=[1000*value/(len(specimen.displacementData)*normalizedValue) for value in y]
                 normalizedValue = max(y_plot)
                 y_plot=[value/normalizedValue for value in y_plot]
-                plt.plot(np.array(specimen.plotTime)/(60*60*24), y_plot, label=specimen.specimenID)
+                ax.plot(np.array(specimen.plotTime)/(60*60*24), y_plot, label=specimen.specimenID)
         
         if normalized is False:
-            plt.ylabel(r'Displacement [µm]')
+            ax.set_ylabel(r'Displacement [µm]')
         else:
-            plt.ylabel(r'Normalized displacement [-]')
-        plt.xlabel("Time [days]")
-        plt.legend()
+            ax.set_ylabel(r'Normalized displacement [-]')
+        ax.set_xlabel("Time [days]")
+        ax.legend()
 
         if logScale is True:
-            plt.xscale("log")
+            ax.set_xscale("log")
 
-        plt.show()
+        fig.tight_layout()
+        fig.tight_layout()
+
+        return fig, ax
     
     def pltSpecimenSpecificCreep(self, 
+                                fig: Optional[Figure] = False,
+                                ax: Optional[Axes] = False,
+                                fontSize: int = False,
                                  logScale:bool = False, 
-                                 normalized:bool = False)  -> None:
+                                 normalized:bool = False)  -> Tuple[Figure, Axes]:
         """
         This method plots the specific creep of each specimen of the experiment, in [µε/MPa]
         It needs to be used after using computeCompliances(), since it will use the attribute specimen.complianceData to plot the data.
         """
         import numpy as np
+
+        if fontSize is False:
+            plt.rcParams['font.size'] = 10  # Set to your desired font size
+        if fig is False or ax is False:
+            fig, ax = plt.subplots(figsize=(15*cm,10*cm))
+        ax.grid(which='both', axis='both', linestyle='-', color='whitesmoke', zorder=-1)
+
         for specimen in self.testSpecimensList:
             listLVDT = list(specimen.specificCreep.keys())
             y=[0 for values in specimen.specificCreep[listLVDT[0]]]
             for series in specimen.specificCreep:
                 y = [valuey+valuedict for valuey,valuedict in zip(y,specimen.specificCreep[series])]
             if normalized is False:
-                plt.plot([value/(60*60*24) for value in specimen.specificCreepTimeData], [value/3 for value in y], label=specimen.specimenID)
+                ax.plot([value/(60*60*24) for value in specimen.specificCreepTimeData], [value/3 for value in y], label=specimen.specimenID)
             else:
                 y_plot= specimen.specificCreep
                 normalizedValue = max(y_plot)
                 y_plot=[value/normalizedValue for value in y_plot]
-                plt.plot([value/(60*60*24) for value in specimen.specificCreepTimeData], y_plot, label=specimen.specimenID)
+                ax.plot([value/(60*60*24) for value in specimen.specificCreepTimeData], y_plot, label=specimen.specimenID)
         
         if normalized is False:
-            plt.ylabel(r'Specific creep [µε/MPa]')
+            ax.set_ylabel(r'Specific creep [µε/MPa]')
         else:
-            plt.ylabel(r'Normalized specific creep [-]')
-        plt.xlabel("Time [days]")
-        plt.legend()
+            ax.set_ylabel(r'Normalized specific creep [-]')
+        ax.set_xlabel("Time [days]")
+        ax.legend()
 
         if logScale is True:
-            plt.xscale("log")
+            ax.set_xscale("log")
+        
+        fig.tight_layout()
+        fig.tight_layout()
 
-        plt.show()
+        return fig, ax
 
     def pltAverageCompliance(self, 
+                             fig: Optional[Figure] = False,
+                             ax: Optional[Axes] = False,
+                             fontSize: int = False,
                              logScale:bool = False, 
                              normalized:bool = False, 
                              stdInterval:bool =False, 
                              specimenResults:bool=False, 
-                             title: Optional[str]=None)  -> None:
+                             title: Optional[str]=None)  -> Tuple[Figure, Axes]:
         """
         This method plots the average compliance considering all the specimens of the experiment, in [µε/MPa]
         It needs to be used after using computeStatisticalMeasures()
         """
+        if fontSize is False:
+            plt.rcParams['font.size'] = 10  # Set to your desired font size
+        if fig is False or ax is False:
+            fig, ax = plt.subplots(figsize=(15*cm,10*cm))
+        ax.grid(which='both', axis='both', linestyle='-', color='whitesmoke', zorder=-1)
+
         if normalized is False:
             plotAverageCompliance=self.averageCompliance
             plotStdDevCompliance=self.stdDevCompliance
@@ -894,9 +933,9 @@ class Experiment():
             plotStdDevCompliance=self.stdDevCompliance/max(self.averageCompliance)
 
         if stdInterval is True:
-            plt.fill_between(self.interpolatedTimeData/(60*60*24), plotAverageCompliance+plotStdDevCompliance, plotAverageCompliance-plotStdDevCompliance, color=(0.9, 0.9, 0.9), label=None)
-            plt.plot(self.interpolatedTimeData/(60*60*24), plotAverageCompliance+plotStdDevCompliance, "-", color="grey", label=None, linewidth=1)
-            plt.plot(self.interpolatedTimeData/(60*60*24), plotAverageCompliance-plotStdDevCompliance, "-", color="grey", label=None, linewidth=1)
+            ax.fill_between(self.interpolatedTimeData/(60*60*24), plotAverageCompliance+plotStdDevCompliance, plotAverageCompliance-plotStdDevCompliance, color=(0.9, 0.9, 0.9), label=None)
+            ax.plot(self.interpolatedTimeData/(60*60*24), plotAverageCompliance+plotStdDevCompliance, "-", color="grey", label=None, linewidth=1)
+            ax.plot(self.interpolatedTimeData/(60*60*24), plotAverageCompliance-plotStdDevCompliance, "-", color="grey", label=None, linewidth=1)
         
         if specimenResults is True:
             for specimen in self.testSpecimensList:
@@ -905,37 +944,48 @@ class Experiment():
                 for series in specimen.complianceData:
                     y = [valuey+valuedict for valuey,valuedict in zip(y,specimen.complianceData[series])]
                 if normalized is False:
-                    plt.plot([value/(60*60*24) for value in specimen.plotTime], [(1e6)*value/3 for value in y], label=specimen.specimenID)
+                    ax.plot([value/(60*60*24) for value in specimen.plotTime], [(1e6)*value/3 for value in y], label=specimen.specimenID)
                 else:
                     y_plot= specimen.specificCreep
                     normalizedValue = max(y_plot)
                     y_plot=[value/normalizedValue for value in y_plot]
-                    plt.plot([value/(60*60*24) for value in specimen.plotTime], y_plot, label=specimen.specimenID)
+                    ax.plot([value/(60*60*24) for value in specimen.plotTime], y_plot, label=specimen.specimenID)
 
-        plt.plot(self.interpolatedTimeData/(60*60*24), plotAverageCompliance, color="black", label="Average")
+        ax.plot(self.interpolatedTimeData/(60*60*24), plotAverageCompliance, color="black", label="Average")
 
         if normalized is False:
-            plt.ylabel(r'Compliance [µε/MPa]')
+            ax.set_ylabel(r'Compliance [µε/MPa]')
         else:
-            plt.ylabel(r'Normalized compliance [-]')
-        plt.xlabel("Time [days]")
-        plt.legend()
+            ax.set_ylabel(r'Normalized compliance [-]')
+        ax.set_xlabel("Time [days]")
+        ax.legend()
 
         if logScale is True:
-            plt.xscale("log")
+            ax.set_xscale("log")
 
-        plt.show()
+        fig.tight_layout()
+        fig.tight_layout()
+        return fig, ax
     
     def pltAverageSpecificCreep(self, 
+                                fig: Optional[Figure] = False,
+                                ax: Optional[Axes] = False,
+                                fontSize: int = False,
                                 logScale:bool = False, 
                                 normalized:bool = False, 
                                 stdInterval:bool=False, 
                                 specimenResults:bool=False, 
-                                title:Optional[str]=None) -> None:
+                                title:Optional[str]=None) -> Tuple[Figure, Axes]:
         """
         This method plots the average specific creep considering all the specimens of the experiment, in [µε/MPa]
         It needs to be used after using computeStatisticalMeasures()
         """
+        if fontSize is False:
+            plt.rcParams['font.size'] = 10  # Set to your desired font size
+        if fig is False or ax is False:
+            fig, ax = plt.subplots(figsize=(15*cm,10*cm))
+        ax.grid(which='both', axis='both', linestyle='-', color='whitesmoke', zorder=-1)
+
         if normalized is False:
             plotAverageSpecificCreep=self.averageSpecificCreep
             plotStdDevSpecificCreep=self.stdDevSpecificCreep
@@ -944,9 +994,9 @@ class Experiment():
             plotStdDevSpecificCreep=self.stdDevSpecificCreep/max(self.averageSpecificCreep)
 
         if stdInterval is True:
-            plt.fill_between(self.interpolatedTimeDataSpecificCreep/(60*60*24), plotAverageSpecificCreep+plotStdDevSpecificCreep, plotAverageSpecificCreep-plotStdDevSpecificCreep, color=(0.9, 0.9, 0.9), label=None)
-            plt.plot(self.interpolatedTimeDataSpecificCreep/(60*60*24), plotAverageSpecificCreep+plotStdDevSpecificCreep, "-", color="grey", label=None, linewidth=1)
-            plt.plot(self.interpolatedTimeDataSpecificCreep/(60*60*24), plotAverageSpecificCreep-plotStdDevSpecificCreep, "-", color="grey", label=None, linewidth=1)
+            ax.fill_between(self.interpolatedTimeDataSpecificCreep/(60*60*24), plotAverageSpecificCreep+plotStdDevSpecificCreep, plotAverageSpecificCreep-plotStdDevSpecificCreep, color=(0.9, 0.9, 0.9), label=None)
+            ax.plot(self.interpolatedTimeDataSpecificCreep/(60*60*24), plotAverageSpecificCreep+plotStdDevSpecificCreep, "-", color="grey", label=None, linewidth=1)
+            ax.plot(self.interpolatedTimeDataSpecificCreep/(60*60*24), plotAverageSpecificCreep-plotStdDevSpecificCreep, "-", color="grey", label=None, linewidth=1)
         
         if specimenResults is True:
             for specimen in self.testSpecimensList:
@@ -955,40 +1005,54 @@ class Experiment():
                 for series in specimen.specificCreep:
                     y = [valuey+valuedict for valuey,valuedict in zip(y,specimen.specificCreep[series])]
                 if normalized is False:
-                    plt.plot([value/(60*60*24) for value in specimen.specificCreepTimeData], [(1e6)*value/3 for value in y], label=specimen.specimenID)
+                    ax.plot([value/(60*60*24) for value in specimen.specificCreepTimeData], [(1e6)*value/3 for value in y], label=specimen.specimenID)
                 else:
                     y_plot= specimen.specificCreep
                     normalizedValue = max(y_plot)
                     y_plot=[value/normalizedValue for value in y_plot]
-                    plt.plot([value/(60*60*24) for value in specimen.specificCreepTimeData], y_plot, label=specimen.specimenID)
+                    ax.plot([value/(60*60*24) for value in specimen.specificCreepTimeData], y_plot, label=specimen.specimenID)
         
-        plt.plot(self.interpolatedTimeDataSpecificCreep/(60*60*24), plotAverageSpecificCreep, color="black", label="Average")
+        ax.plot(self.interpolatedTimeDataSpecificCreep/(60*60*24), plotAverageSpecificCreep, color="black", label="Average")
 
 
         if normalized is False:
-            plt.ylabel(r'Specific creep [µε/MPa]')
+            ax.set_ylabel(r'Specific creep [µε/MPa]')
         else:
-            plt.ylabel(r'Normalized specific creep [-]')
-        plt.xlabel("Time [days]")
-        plt.legend()
+            ax.set_ylabel(r'Normalized specific creep [-]')
+        ax.set_xlabel("Time [days]")
+        ax.legend()
 
         if logScale is True:
-            plt.xscale("log")
+            ax.set_xscale("log")
 
         if title is not None:
-            plt.title(title)
+            ax.set_title(title)
 
-        plt.show()
+        fig.tight_layout()
+        fig.tight_layout()
+        return fig, ax
 
     def pltCoefficientOfVariationSpecificCreep(self, 
+                                                fig: Optional[Figure] = False,
+                                                ax: Optional[Axes] = False,
+                                                fontSize: int = False,
                                                logScale:bool = False) -> None:
-        plt.plot(self.interpolatedTimeData/(60*60*24), 100*self.coefficientOfVariationCompliance, color="black", label="Average")
-        plt.xlabel("Time [days]")
-        plt.ylabel("Coefficient of variation (%)")
-        plt.legend()
+        if fontSize is False:
+            plt.rcParams['font.size'] = 10  # Set to your desired font size
+        if fig is False or ax is False:
+            fig, ax = plt.subplots(figsize=(15*cm,10*cm))
+        ax.grid(which='both', axis='both', linestyle='-', color='whitesmoke', zorder=-1)
+
+        ax.plot(self.interpolatedTimeData/(60*60*24), 100*self.coefficientOfVariationCompliance, color="black", label="Average")
+        ax.set_xlabel("Time [days]")
+        ax.set_ylabel("Coefficient of variation (%)")
+        ax.legend()
         if logScale is True:
-            plt.xscale("log")
-        plt.show()
+            ax.set_xscale("log")
+        
+        fig.tight_layout()
+        fig.tight_layout()
+        return fig, ax
 
     #Methods for saving results in csv files
     def saveAverageDisplacementData(self, 

@@ -1,0 +1,2 @@
+To install the static creep library, use the following pip command:
+pip install -e "C:\Users\Renan\OneDrive\Renan\Engenharia Civil\Desenvolvimentos\staticCreepPostProcess"
